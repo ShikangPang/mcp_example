@@ -1,0 +1,13 @@
+[project]
+name = "testmcp"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "asyncpg>=0.30.0",
+    "dashscope>=1.23.4",
+    "mcp[cli]>=1.9.3",
+    "openai>=1.84.0",
+    "python-dotenv>=1.1.0",
+]
