@@ -336,7 +336,9 @@ async def run_simple_demo():
     question = "请用100字左右简单介绍什么是人工智能。"
     models = [
         ModelType.DASHSCOPE_QWEN,
-        ModelType.DASHSCOPE_QWEN_MAX
+        ModelType.DASHSCOPE_QWEN_MAX,
+        ModelType.DASHSCOPE_QWEN_VL_MAX,
+        ModelType.DASHSCOPE_QWEN_AUDIO_TURBO_LATEST
     ]
     
     result = await battle.battle(question, models, num_rounds=1)
