@@ -202,7 +202,7 @@ def get_table_structure(table_name: str) -> str:
     return execute_query_sync(query, (table_name,))
 
 @mcp.tool()
-def query_users(limit: int = 10) -> str:
+def query_user_info(user_id: int, limit: int = 10) -> str:
     """
     查询用户表数据。
     参数:
@@ -210,8 +210,23 @@ def query_users(limit: int = 10) -> str:
     返回:
       用户数据
     """
-    query = "SELECT id, email, phone, name, created_at FROM users"
-    return execute_query_sync(query, (), limit)
+    query = "SELECT * FROM users where id = $1"
+    result =  execute_query_sync(query, (user_id,), limit)
+    user_info = {
+        "用户ID": result["id"],
+        "用户名": result["name"],
+        "年龄": result["age"],
+        "性别": result["gender"],
+        "身高": result["height"],
+        "体重": result["weight"],
+        "BMI": round(result["weight"] / ((result["height"]/100) ** 2), 1) if result["weight"] and result["height"] else '未计算',
+        "健康目标": result["health_goal"],
+        "饮食偏好": result["diet_preference"],
+        "活动水平": result["activity_level"],
+        "过敏信息": result["allergies"],
+        "健康状况": result["health_conditions"]
+    }
+    return user_info
 
 @mcp.tool()
 def query_foods(search_term: str = "", limit: int = 20) -> str:
@@ -318,6 +333,32 @@ def get_recipe_details(recipe_id: int) -> str:
     """
     query = "SELECT * FROM recipes WHERE id = $1"
     return execute_query_sync(query, (recipe_id,), 1)
+@mcp.tool()
+def get_diet_records(user_id: int) -> str:
+    """
+    获取用户饮食历史。
+    参数:
+      user_id: 用户ID
+    返回:
+      用户饮食历史
+    """
+    query = "SELECT * FROM diet_records WHERE user_id = $1"
+    result = execute_query_sync(query, (user_id,), 10)
+    diet_records = []
+    for record in result:
+        diet_record= {
+            "食物": record["diet_name"],
+            "数量": record["quantity"],
+            "类型": "早餐" if record["meal_type"] == "breakfast" else "午餐" if record["meal_type"] == "lunch" else "晚餐" if record["meal_type"] == "dinner" else "加餐" if record["meal_type"] == "snack" else "其他",
+            "单位": record["unit"],
+            "卡路里": record["calories"],
+            "蛋白质": record["protein"],
+            "脂肪": record["fat"],
+            "碳水化合物": record["carbs"],
+            "时间": record["created_at"]
+        }
+        diet_records.append(diet_record)
+    return diet_records
 
 @mcp.tool()
 def search_recipes_by_ingredient(ingredient: str, limit: int = 10) -> str:
@@ -424,6 +465,108 @@ def nutrition_analysis_battle(food_list: str) -> str:
     question = f"请分析以下食物的营养价值和健康益处：{food_list}。包括热量、主要营养成分和适合的人群。"
     models = ["qwen-turbo", "qwen-max"]
     return execute_battle_sync(question, models)
+
+@mcp.tool()
+def query_user_by_phone(phone: str) -> str:
+    """
+    通过手机号查询用户信息。
+    参数:
+      phone: 手机号码
+    返回:
+      用户数据
+    """
+    query = "SELECT * FROM users WHERE phone = $1 OR name = $1"
+    result = execute_query_sync(query, (phone,), 1)
+    
+    # 如果结果是字符串（表示错误或无结果），直接返回
+    if isinstance(result, str):
+        return result
+    
+    # 如果结果是列表且有数据
+    if isinstance(result, list) and len(result) > 0:
+        user = result[0]
+        user_info = {
+            "用户ID": user.get("id"),
+            "用户名": user.get("name"),
+            "手机号": user.get("phone"),
+            "年龄": user.get("age"),
+            "性别": user.get("gender"),
+            "身高": user.get("height"),
+            "体重": user.get("weight"),
+            "BMI": round(user["weight"] / ((user["height"]/100) ** 2), 1) if user.get("weight") and user.get("height") else '未计算',
+            "健康目标": user.get("health_goal"),
+            "饮食偏好": user.get("diet_preference"),
+            "活动水平": user.get("activity_level"),
+            "过敏信息": user.get("allergies"),
+            "健康状况": user.get("health_conditions")
+        }
+        return user_info
+    else:
+        return f"未找到手机号为 {phone} 的用户"
+
+@mcp.tool()
+def generate_weekly_diet_plan(user_info: str, user_id: int = None) -> str:
+    """
+    生成个性化的一周饮食计划。
+    参数:
+      user_info: 用户信息（JSON字符串或描述）
+      user_id: 用户ID（可选，用于获取饮食历史）
+    返回:
+      个性化的一周饮食推荐计划
+    """
+    try:
+        # 获取用户饮食历史（如果提供了用户ID）
+        diet_history = ""
+        if user_id:
+            try:
+                history_result = get_diet_records(user_id)
+                if isinstance(history_result, list) and len(history_result) > 0:
+                    diet_history = f"\n用户最近的饮食记录：{str(history_result[:5])}"  # 只取最近5条
+            except:
+                diet_history = ""
+        
+        # 获取一些推荐的健康食物
+        healthy_foods = query_foods("", 15)  # 获取15种食物作为参考
+        
+        # 获取一些健康食谱
+        healthy_recipes = query_recipes("", 10)  # 获取10个食谱作为参考
+        
+        # 构建详细的提示
+        prompt = f"""请根据以下用户信息，制定一个详细的一周饮食计划：
+
+用户信息：
+{user_info}
+
+{diet_history}
+
+可参考的健康食物：
+{healthy_foods}
+
+可参考的健康食谱：
+{healthy_recipes}
+
+请制定一个详细的一周饮食计划，包括：
+1. 每天的三餐安排（早餐、午餐、晚餐）
+2. 根据用户的健康目标、饮食偏好、过敏信息等个性化定制
+3. 营养搭配均衡，包含蛋白质、碳水化合物、脂肪、维生素等
+4. 考虑用户的活动水平调整热量摄入
+5. 如果有健康状况，请给出相应的饮食建议
+6. 每餐的大概热量和主要营养成分
+7. 简单的制作建议或食谱推荐
+
+格式要求：
+- 按天组织（周一到周日）
+- 每天包含早餐、午餐、晚餐
+- 每餐包含具体食物、分量、营养价值
+- 总结每日营养摄入和健康要点
+
+请确保推荐科学合理，符合营养学原理。"""
+
+        # 使用AI模型生成饮食计划
+        return execute_battle_sync(prompt, ["qwen-max"])
+        
+    except Exception as e:
+        return f"生成饮食计划失败：{str(e)}"
 
 if __name__ == "__main__":
     mcp.run(transport='stdio')
